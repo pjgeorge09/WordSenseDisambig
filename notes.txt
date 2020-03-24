@@ -1,0 +1,14 @@
+Consider :
+    Remove all " <> " at start
+    Remove all punctuation
+
+TODO : 
+    Parse entire list of training. Save all K words in relation to PRODUCT and PHONE
+    Look at the highest words that are within Product and are within Phone.
+
+Rules :
+    Rule # 1, if telephone or phone at -1, then PHONE
+    If "call" or "callers" within k words, then phone. NOT "called"
+
+Notes : 
+    K is gonna be large.
