@@ -12,3 +12,19 @@ Rules :
 
 Notes : 
     K is gonna be large.
+
+
+senseid="phone" senseid="product" 6
+senseid="product" senseid="phone" 23
+senseid="product" senseid="phone" 42
+senseid="product" senseid="phone" 49
+senseid="phone" senseid="product" 54
+senseid="phone" senseid="product" 59
+senseid="product" senseid="phone" 73
+senseid="phone" senseid="product" 75
+senseid="phone" senseid="product" 91
+senseid="phone" senseid="product" 92
+senseid="product" senseid="phone" 93
+senseid="product" senseid="phone" 107
+senseid="phone" senseid="product" 118
+senseid="phone" senseid="product" 124

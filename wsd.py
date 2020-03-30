@@ -16,11 +16,40 @@ Per grading rubric:
 from sys import argv
 import re
 import numpy as np
+import math
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+
+def addFeatTypeKeys(aDict):
+    aDict["+1 W"] = {}
+    aDict["-1 W"] = {}
+    aDict["+-k W"] = {}
+    aDict["-2 -1"] = {}
+    aDict["-1 +1"] = {}
+    aDict["+1 +2"] = {}
+    return aDict
 
 ''' Turn any string into an array of tokens based on white space(+)
     Regex tools used : re.split on white space'''
 def tokenize(phrase):
-    return re.split(r'\s+', phrase)
+    this = re.split(r'\s+', phrase)
+    this = [word for word in this if not word in stopwords.words()]
+    return this
+
+def cleanIt(phrase):
+    ''' Fix this to some method or something.'''
+    phrase = re.sub('\$', '$ ', phrase) # Handle Dollar case
+    phrase = re.sub("%", " % ", phrase) # Handle Percent Case
+    phrase = re.sub('\-', " ", phrase) # Handle Hyphen Case
+    phrase = re.sub('[\”|\“|\(|/)|\:|\;|\"|\’|!|,|\?|\'|‘]', '', phrase) # Destroy all quotes and some punctiation
+    phrase = re.sub('</s>|</p>|<p>|<s>|<@>', '', phrase) # Handle carroted things
+    phrase = re.sub(r'\. ', " ", phrase) # Handle punctuation that is followed by a space (EOL)
+    phrase = re.sub('\.s ', "s ", phrase) # Handle punctuation followed by an s (Special Case)
+    phrase = re.sub('/','',phrase) # Handle this case separately, at end
+    phrase = re.sub("\s+" , " ", phrase) # Turn awkward spaces into single spaces
+    sentence = phrase.lower() # DO THIS?
+    return(sentence)
 
 ''' Handle command line arguments'''
 train = str(argv[1]) 
@@ -45,13 +74,7 @@ numOfSets = len(toAdd)
 phoneDict = {}
 productDict = {}
 features = {}
-# Better way to do this, I'm sure.
-features["+1 W"] = {}
-features["-1 W"] = {}
-features["+-k W"] = {}
-features["-2 -1"] = {}
-features["-1 +1"] = {}
-features["+1 +2"] = {}
+features = addFeatTypeKeys(features)
 
 x = 0
 while (x < numOfSets):
@@ -61,18 +84,8 @@ while (x < numOfSets):
     temp2 = re.search(r'phone|product',toAdd[x+1]) # Successfully isolates sense    NO QUOTES
     sense = temp2.group(0)
     temp3 = toAdd[x+2]
-    ''' Fix this to some method or something.'''
-    temp3 = re.sub('\$', '$ ', temp3) # Handle Dollar case
-    temp3 = re.sub("%", " % ", temp3) # Handle Percent Case
-    temp3 = re.sub('\-', " ", temp3) # Handle Hyphen Case
-    temp3 = re.sub('[\”|\“|\(|/)|\:|\;|\"|\’|!|,|\?|\'|‘]', '', temp3) # Destroy all quotes and some punctiation
-    temp3 = re.sub('</s>|</p>|<p>|<s>|<@>', '', temp3) # Handle carroted things
-    temp3 = re.sub(r'\. ', " ", temp3) # Handle punctuation that is followed by a space (EOL)
-    temp3 = re.sub('\.s ', "s ", temp3) # Handle punctuation followed by an s (Special Case)
-    temp3 = re.sub('/','',temp3) # Handle this case separately, at end
-    temp3 = re.sub("\s+" , " ", temp3) # Turn awkward spaces into single spaces
-    sentence = temp3.lower() # DO THIS?
-    print(sentence)
+    sentence = cleanIt(temp3)
+    #print(sentence)
     # Pretty sure I don't need the below lines or those dictionaries anymore.
     if sense == "phone":
         phoneDict[key] = [sentence]
@@ -200,8 +213,232 @@ while (x < numOfSets):
         # print("fail    +-k W")
         # print(kTokens)
         pass
-for line in toAdd:
-    print(line)
+
+# for x1 in features:
+#     print(str(x1))
+#     print(features[x1])
+rankings = {}
+rankings["+1 W"] = {}
+rankings["-1 W"] = {}
+rankings["+-k W"] = {}
+rankings["-2 -1"] = {}
+rankings["-1 +1"] = {}
+rankings["+1 +2"] = {}
+sense1 = 'phone'
+sense2 = 'product'
+
+''' Solve and print Rankings '''
+''' I am not confident the log math is correct considering I'm getting values over 1'''
+for aFeatureType in features:
+    for thisFeature in features[aFeatureType]:
+        if(sense1 not in features[aFeatureType][thisFeature].keys()):
+            features[aFeatureType][thisFeature][sense1] = 0
+        if(sense2 not in features[aFeatureType][thisFeature].keys()):
+            features[aFeatureType][thisFeature][sense2] = 0
+        # The count of sense 1 given f_i
+        A = features[aFeatureType][thisFeature][sense1]
+        # The count of sense 2 given f_i
+        B = features[aFeatureType][thisFeature][sense2]
+        # f_i
+        C = A+B
+        if thisFeature not in rankings[aFeatureType]:
+            rankings[aFeatureType][thisFeature] = {}
+        # logA = 0.0002
+        # logB = 0.0002
+        # logC = 0.0002
+        # if(A != 0):
+        #     logA = math.log(A/C)
+        # if(B != 0):
+        #     logB = math.log(B/C)
+        # if(C != 0):
+        #     locC = math.log(C)
+        alpha = 0.2
+        A = A + alpha
+        B = B + alpha
+        C = C + alpha
+        rankings[aFeatureType][thisFeature] = abs(math.log((A/C)/(B/C)))
+        
+        # rankings[aFeatureType][thisFeature] = abs(logA / logB)
+
+
+rankedOutput = {}
+for x1 in rankings:
+    for x2 in rankings[x1]:
+        rankedOutput[(x1,x2)] = rankings[x1][x2]
+
+# Sorted rules that WORK
+testRSorted = sorted(rankedOutput.items(), key=lambda x: (x[1],x[0]), reverse=True)
+
+File2 = open("my-model.txt", "w+")
+File2.write(" Log Probabilities. In the form (('Feature Type', 'Feature'), log probability)\n")
+for x in testRSorted:
+    File2.write(str(x) + "\n")
+
+# for line in toAdd:
+#     print(line)
+
+''' So parse a sentence, get it's context. Now check each context. Sum the values, and the highest value is the answer '''
+''' Preprocessing done here FOR TEST'''
+File = open(test, 'r') # Open file
+toAdd2 = File.read() # Read file
+toAdd2 = re.sub('<[/]?context>\s|</instance>\s','', toAdd2) # Successfully deletes all context lines
+toAdd2 = toAdd2.splitlines() # Split up everything by line
+
+toAdd2 = toAdd2[2:len(toAdd2)-2] # This assumes last line as blank is required.
+
+numOfSets = len(toAdd2)
+
+features2 = {}
+# testdict[instance][sense]
+# testcontext[instance][featuretype][feature]
+testdict = {}
+testcontext = {}
+
+x = 0
+while (x < numOfSets):
+    temp = re.search(r'".*"', toAdd2[x]) # Successfully isolates key   INCLUDES QUOTES
+    key = temp.group(0)
+    testdict[key] = {}
+    testcontext[key] = {}
+    testcontext[key] = addFeatTypeKeys(testcontext[key])
+    temp2 = toAdd2[x+1]
+    sentence2 = cleanIt(temp2)
+
+    # print(sentence2)
+
+    tokens = tokenize(sentence2)
+    tokens = tokens[1:-1] # Adding a space at start and end of every one. Not sure why but easy fix with this!
+    location = 1000
+    # print(tokens)
+    for y in range (0,len(tokens)):
+        if tokens[y] == "<head>line<head>" or tokens[y] == "<head>lines<head>":
+            location = y
+    y = location
+    #['+1 W' , '-1 W' , '+-k W' , '-2 -1' , '-1 +1' , '+1 +2']
+    # Not get all the features and feature types
+    ''' +1 W Feature Type'''
+    try:
+        testcontext[key]['+1 W'] = tokens[y+1]
+    except:
+        # print("+1 W failure")
+        pass
+    ''' -1 W Feature Type'''
+    try:
+        testcontext[key]['-1 W'] = tokens[y-1]
+    except:
+        # print("-1 W failure")
+        pass
+    ''' -2 -1 Feature Type'''
+    try:
+        temp21 = tokens[y-2] + " " + tokens[y-1]
+        testcontext[key]['-2 -1'] = temp21
+    except:
+        # print("-2 -1 failure")
+        pass
+    ''' -1 +1 Feature Type'''
+    try:
+        temp11 = tokens[y-1] + " " + tokens[y+1]
+        testcontext[key]['-1 +1'] = temp11
+    except:
+        # print("-1 +1 failure")
+        pass
+    ''' +1 +2 Feature Type'''
+    try:
+        temp12 = tokens[y+1] + " " + tokens[y+2]
+        testcontext[key]['+1 +2'] = temp12
+    except:
+        # print("+1 +2 failure")
+        pass
+    ''' +-k W Feature Type'''
+    k0 = y-k
+    kn = y+k
+    if k0 < 0:
+        k0 = 0
+    if kn > len(tokens):
+        kn = len(tokens)-1 # CHECK THIS -1
+    kTokens = tokens[k0:kn]
+    if '<head>line<head>' in kTokens:
+        kTokens.remove('<head>line<head>')
+    if '<head>lines<head>' in kTokens:
+        kTokens.remove('<head>lines<head>')
+    try:
+        # For every element in the list from k0 to kn, excluding y
+        testcontext[key]['+-k W'] = kTokens
+    except:
+        # print("+-k W failure")
+        pass
+    x+=2
+
+# for _ in testcontext:
+#     print(testcontext[_])
+
+threshold = 0
+''' Math it '''
+# for _ in testcontext:
+#     print(testcontext[_])
+
+
+''' what i need is a method that is going to get the tuple key like +1 W and WORD
+    take those, and test if THIS context has WORD at +1W'''
+Collection = {}
+
+# solved = False
+# while(not solved):
+#     # iterate through my ranked list!
+#     # testRSorted
+#     for x in range (0, len(testRSorted)): #fix this it ugly
+#         FT = testRSorted[x][0][0]
+#         F = testRSorted[x][0][1]
+#         solved = True
+# for _ in testcontext:
+#     print(_)
+
+#<answer instance="line-n.w8_059:8174:" senseid="phone"/>
+
+for _ in testcontext:
+    toPrint = "<answer instance=" + str(_)+ " senseid=\""
+    solved = False
+    added = False
+    thisSense = "phone" #baseline
+    while (not solved):
+        for x in testRSorted:
+            FT = x[0][0]
+            F = x[0][1]
+            if F in testcontext[_][FT]: # This works for the array as well!
+                # print("Found it with " + str(FT) + " and ( " + str(F) + " )" )
+                if features[FT][F]["product"] > features[FT][F]["phone"]:
+                    toPrint = toPrint + "product\"/>"
+                    added = True
+                else:
+                    toPrint = toPrint + "phone\"/>"
+                    added = True
+                solved = True
+                break
+        solved = True
+    if not added:
+        toPrint = toPrint + "phone\"/>"
+    print(toPrint)
+        
+''' OUTPUT!!! '''       
+
+
+
+
+
+
+# for x in testcontext:
+#     for x2 in testcontext[x]:
+#         print(x2)
+#         print(testcontext[x][x2])
+
+
+
+
+
+# for x in toAdd2:
+#     print(x)
+
+    
 '''-------------------------------------------------------------------------'''
 '''---------------------------------MAIN------------------------------------'''
 '''-------------------------------------------------------------------------'''
