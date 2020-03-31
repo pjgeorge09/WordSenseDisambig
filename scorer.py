@@ -1,7 +1,12 @@
+# -*- coding: utf-8 -*-
 '''
-python3 scorer.py my-line-answers.txt line-key.txt'''
+@author: Peter
+@class : CMSC416 Natural Language Processing
+@assignment : 4
+@due date : 03/26/2020
 
-
+    Example run : 
+            -> python3 scorer.py my-line-answers.txt line-key.txt'''
 from sys import argv
 import re
 import numpy as np
@@ -23,11 +28,11 @@ Mine = Mine.splitlines()
 MyList = []
 KeyList = []
 
-for x in range(0, len(Key)):
-    if Mine[x] != Key[x]:
-        temp = re.search("senseid=\"((.*))\"", Mine[x]) # Successfully isolates key   INCLUDES QUOTES
-        temp2 = re.search("senseid=\"((.*))\"", Key[x]) # Successfully isolates key   INCLUDES QUOTES
-        print(str(temp.group(1)) + " " + str(temp2.group(1)) +" "+ str(x+1))
+# for x in range(0, len(Key)):
+#     if Mine[x] != Key[x]:
+#         temp = re.search("senseid=\"((.*))\"", Mine[x]) # Successfully isolates key   INCLUDES QUOTES
+#         temp2 = re.search("senseid=\"((.*))\"", Key[x]) # Successfully isolates key   INCLUDES QUOTES
+#         print(str(temp.group(1)) + " " + str(temp2.group(1)) +" "+ str(x+1))
 
 for x in range(0, len(Key)):
     temp = re.search("senseid=\"((.*))\"", Mine[x]) # Successfully isolates key   INCLUDES QUOTES
@@ -52,4 +57,4 @@ y_actu = pd.Series(KeyList, name='Actual')
 y_pred = pd.Series(MyList, name='Predicted')
 df_confusion = pd.crosstab(y_actu, y_pred)
 pd.set_option('display.expand_frame_repr', False)
-print("Confusion matrix:\n%s" % df_confusion)
+print("\nConfusion matrix:\n%s" % df_confusion)

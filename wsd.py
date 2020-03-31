@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
+'''
 @author: Peter
 @class : CMSC416 Natural Language Processing
 @assignment : 4
@@ -9,10 +9,16 @@
             -> python3 wsd.py line-train.txt line-test.txt my-model.txt > my-line-answers.txt
 
 Per grading rubric: 
-    The Problem: 
+    The Problem : 
+            -> Intake data from a txt (formatted from .xml) , and utilizing either Naive Bayes or Decision List classifiers, perform
+               Word Sense Disambiguation. Train on one file, test on a second, and compare it with a provided key to check accuracy later.
     Actual Examples: 
         For general example, 
-"""
+            -> python3 wsd.py TrainingData.txt TestingData.txt WriteableFileForRules.txt > FormattedPredictions.txt
+            Context of program example:
+                -> "... cellular </>line</> for ..." --> learning based on the -1 W word "cellular" in training would imply the "sense" would be "phone"
+                
+'''
 from sys import argv
 import re
 import numpy as np
@@ -21,6 +27,7 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 
+''' A method to quickly add keys of each feature type.'''
 def addFeatTypeKeys(aDict):
     aDict["+1 W"] = {}
     aDict["-1 W"] = {}
@@ -33,12 +40,13 @@ def addFeatTypeKeys(aDict):
 ''' Turn any string into an array of tokens based on white space(+)
     Regex tools used : re.split on white space'''
 def tokenize(phrase):
-    this = re.split(r'\s+', phrase)
-    this = [word for word in this if not word in stopwords.words()]
-    return this
+    toReturn = re.split(r'\s+', phrase)
+    toReturn = [word for word in toReturn if not word in stopwords.words()] # Also removes stop words!
+    return toReturn[1:-1] # Adding a space at start and end of every one. Not sure why but easy fix with this!
 
+''' General phrase-cleaning tailored to this assignment. Regex based.'''
 def cleanIt(phrase):
-    ''' Fix this to some method or something.'''
+    #TODO consolodate
     phrase = re.sub('\$', '$ ', phrase) # Handle Dollar case
     phrase = re.sub("%", " % ", phrase) # Handle Percent Case
     phrase = re.sub('\-', " ", phrase) # Handle Hyphen Case
@@ -48,55 +56,54 @@ def cleanIt(phrase):
     phrase = re.sub('\.s ', "s ", phrase) # Handle punctuation followed by an s (Special Case)
     phrase = re.sub('/','',phrase) # Handle this case separately, at end
     phrase = re.sub("\s+" , " ", phrase) # Turn awkward spaces into single spaces
-    sentence = phrase.lower() # DO THIS?
+    sentence = phrase.lower() 
     return(sentence)
 
+def readAndSplit(aFileName):
+    File = open(aFileName, 'r') # Open file
+    toReturn = File.read() # Read file
+    toReturn = re.sub('<[/]?context>\s|</instance>\s','', toReturn) # Successfully deletes all context lines
+    toReturn = toReturn.splitlines() # Split up everything by line
+    # We can get rid of every first line, every last line (That is a space), and every last 2 lines (Total of 3 last lines)
+    toReturn = toReturn[2:len(toReturn)-2] 
+    return toReturn
+
+''' -------------------------------------------------------------------------------------------------------------------------------------------------------- '''
+''' --------------------------------------------------------------------- MAIN ----------------------------------------------------------------------------- '''
+'''--------------------------------------------------------------------------------------------------------------------------------------------------------- '''
+
 ''' Handle command line arguments'''
-train = str(argv[1]) 
-test = str(argv[2])
-k = 5
-''' Preprocessing done here'''
-File = open(train, 'r') # Open file
-toAdd = File.read() # Read file
-toAdd = re.sub('<[/]?context>\s|</instance>\s','', toAdd) # Successfully deletes all context lines
-toAdd = toAdd.splitlines() # Split up everything by line
+train = str(argv[1]) # Training Data
+test = str(argv[2])  # Testing Data
+''' Global Variables'''
+k = 5 # Value of look-around 
+sense1 = 'phone'
+sense2 = 'product'
+alpha = 0.2 # Adjustment factor
 
-# We can get rid of every first line, every last line (That is a space), and every last 2 lines (Total of 3 last lines)
-toAdd = toAdd[2:len(toAdd)-2] # This assumes last line as blank is required.
-#print(toAdd[len(toAdd)-1]) # TEST for last line
+''' -------------------------------------------------------------------------------------------------------------------------------------------------------- '''
+''' -------------------------------------------------------------------------------------------------------------------------------------------------------- '''
+'''----------------------------------------------------------------- Training Data -------------------------------------------------------------------------- '''
 
-# Handle the first line as target word? Will need to modify toAdd = toAdd[2:len(toAdd)-3] # This assumes last line as blank is required.
+toAdd = readAndSplit(train) # Preprocessing
 
 ''' Ready to parse. Sets of 3 lines. First line, get instance ID. Second line, get senseID. Third line, get context.'''
-
 numOfSets = len(toAdd)
-
-phoneDict = {}
-productDict = {}
 features = {}
 features = addFeatTypeKeys(features)
 
 x = 0
 while (x < numOfSets):
-    # Should I remove the quotes for now?
     temp = re.search(r'".*"', toAdd[x]) # Successfully isolates key   INCLUDES QUOTES
     key = temp.group(0)
     temp2 = re.search(r'phone|product',toAdd[x+1]) # Successfully isolates sense    NO QUOTES
     sense = temp2.group(0)
     temp3 = toAdd[x+2]
     sentence = cleanIt(temp3)
-    #print(sentence)
-    # Pretty sure I don't need the below lines or those dictionaries anymore.
-    if sense == "phone":
-        phoneDict[key] = [sentence]
-    elif sense == "product":
-        productDict[key] = [sentence]
-    else:
-        print("Error!")
+    
     x+=3
 
     tokens = tokenize(sentence)
-    tokens = tokens[1:-1] # Adding a space at start and end of every one. Not sure why but easy fix with this!
     location = 1000
     for y in range (0,len(tokens)):
         if tokens[y] == "<head>line<head>" or tokens[y] == "<head>lines<head>":
@@ -133,7 +140,6 @@ while (x < numOfSets):
             features['-1 W'][tokens[y-1]][sense] += 1
     except:
         # print("fail        -1 W")
-        # print("Element " + str(y) + " of " + str(len(tokens)-1))
         pass
     
     ''' -2 -1 Feature Type'''
@@ -182,12 +188,11 @@ while (x < numOfSets):
             features['+1 +2'][temp12][sense] += 1
     except:
         # print("fail     +1 +2")
-        # print("Element " + str(y) + " of " + str(len(tokens)-1))
         pass
 
     ''' +-k W Feature Type'''
-    k0 = y-k
-    kn = y+k
+    k0 = y-k # Leftmost workable value
+    kn = y+k # Rightmost workable value
     if k0 < 0:
         k0 = 0
     if kn > len(tokens):
@@ -211,111 +216,74 @@ while (x < numOfSets):
                 features['+-k W'][z][sense] += 1
     except:
         # print("fail    +-k W")
-        # print(kTokens)
         pass
+''' --------------------------------------------------------- End Training Data --------------------------------------------------------------------------- '''
+''' ------------------------------------------------------------------------------------------------------------------------------------------------------- '''
+''' ---------------------------------------------------------- Generate Rules ----------------------------------------------------------------------------- '''
 
-# for x1 in features:
-#     print(str(x1))
-#     print(features[x1])
 rankings = {}
-rankings["+1 W"] = {}
-rankings["-1 W"] = {}
-rankings["+-k W"] = {}
-rankings["-2 -1"] = {}
-rankings["-1 +1"] = {}
-rankings["+1 +2"] = {}
-sense1 = 'phone'
-sense2 = 'product'
-
-''' Solve and print Rankings '''
-''' I am not confident the log math is correct considering I'm getting values over 1'''
+rankings = addFeatTypeKeys(rankings)
+''' Rank the individual tests by taking the ratio of the log likelihood '''
 for aFeatureType in features:
     for thisFeature in features[aFeatureType]:
+
+        # Init values that are null to 0
         if(sense1 not in features[aFeatureType][thisFeature].keys()):
             features[aFeatureType][thisFeature][sense1] = 0
         if(sense2 not in features[aFeatureType][thisFeature].keys()):
             features[aFeatureType][thisFeature][sense2] = 0
-        # The count of sense 1 given f_i
-        A = features[aFeatureType][thisFeature][sense1]
-        # The count of sense 2 given f_i
-        B = features[aFeatureType][thisFeature][sense2]
-        # f_i
-        C = A+B
-        if thisFeature not in rankings[aFeatureType]:
+
+        A = features[aFeatureType][thisFeature][sense1]        # The count of sense 1 given f_i
+        B = features[aFeatureType][thisFeature][sense2]        # The count of sense 2 given f_i
+        C = A+B                                                # f_i
+
+        if thisFeature not in rankings[aFeatureType]:          # init features
             rankings[aFeatureType][thisFeature] = {}
-        # logA = 0.0002
-        # logB = 0.0002
-        # logC = 0.0002
-        # if(A != 0):
-        #     logA = math.log(A/C)
-        # if(B != 0):
-        #     logB = math.log(B/C)
-        # if(C != 0):
-        #     locC = math.log(C)
-        alpha = 0.2
         A = A + alpha
-        B = B + alpha
+        B = B + alpha # Modify ABC by alpha to add small smoothing for 0 numerator/denominators
         C = C + alpha
         rankings[aFeatureType][thisFeature] = abs(math.log((A/C)/(B/C)))
-        
-        # rankings[aFeatureType][thisFeature] = abs(logA / logB)
 
-
+# Reformat dictionary for easy sorting (Where 1 key is a tuple for lambda function)
 rankedOutput = {}
 for x1 in rankings:
     for x2 in rankings[x1]:
         rankedOutput[(x1,x2)] = rankings[x1][x2]
 
-# Sorted rules that WORK
-testRSorted = sorted(rankedOutput.items(), key=lambda x: (x[1],x[0]), reverse=True)
-
+# Sorted rules
+sortedRules = sorted(rankedOutput.items(), key=lambda x: (x[1],x[0]), reverse=True)
+# Output rules to my-model.txt
 File2 = open("my-model.txt", "w+")
 File2.write(" Log Probabilities. In the form (('Feature Type', 'Feature'), log probability)\n")
-for x in testRSorted:
+for x in sortedRules:
     File2.write(str(x) + "\n")
 
-# for line in toAdd:
-#     print(line)
+''' -------------------------------------------------- Rules are complete --------------------------------------------------------------------------------- '''
+''' ------------------------------------------------------------------------------------------------------------------------------------------------------- '''
+'''----------------------------------------------------- Testing Data ------------------------------------------------------------------------------------- '''
 
-''' So parse a sentence, get it's context. Now check each context. Sum the values, and the highest value is the answer '''
-''' Preprocessing done here FOR TEST'''
-File = open(test, 'r') # Open file
-toAdd2 = File.read() # Read file
-toAdd2 = re.sub('<[/]?context>\s|</instance>\s','', toAdd2) # Successfully deletes all context lines
-toAdd2 = toAdd2.splitlines() # Split up everything by line
-
-toAdd2 = toAdd2[2:len(toAdd2)-2] # This assumes last line as blank is required.
-
+toAdd2 = readAndSplit(test) # Preprocessing
 numOfSets = len(toAdd2)
-
-features2 = {}
-# testdict[instance][sense]
-# testcontext[instance][featuretype][feature]
-testdict = {}
 testcontext = {}
 
 x = 0
 while (x < numOfSets):
     temp = re.search(r'".*"', toAdd2[x]) # Successfully isolates key   INCLUDES QUOTES
     key = temp.group(0)
-    testdict[key] = {}
+
     testcontext[key] = {}
-    testcontext[key] = addFeatTypeKeys(testcontext[key])
-    temp2 = toAdd2[x+1]
-    sentence2 = cleanIt(temp2)
+    testcontext[key] = addFeatTypeKeys(testcontext[key]) # Init all the dictionary keys
 
-    # print(sentence2)
-
-    tokens = tokenize(sentence2)
-    tokens = tokens[1:-1] # Adding a space at start and end of every one. Not sure why but easy fix with this!
+    context = toAdd2[x+1] # The sentence itself
+    tokens = tokenize(cleanIt(context)) # Cleaned and tokenized
+    
     location = 1000
-    # print(tokens)
     for y in range (0,len(tokens)):
         if tokens[y] == "<head>line<head>" or tokens[y] == "<head>lines<head>":
             location = y
     y = location
     #['+1 W' , '-1 W' , '+-k W' , '-2 -1' , '-1 +1' , '+1 +2']
-    # Not get all the features and feature types
+    # Now get all the features and feature types
     ''' +1 W Feature Type'''
     try:
         testcontext[key]['+1 W'] = tokens[y+1]
@@ -355,7 +323,7 @@ while (x < numOfSets):
     if k0 < 0:
         k0 = 0
     if kn > len(tokens):
-        kn = len(tokens)-1 # CHECK THIS -1
+        kn = len(tokens)-1 
     kTokens = tokens[k0:kn]
     if '<head>line<head>' in kTokens:
         kTokens.remove('<head>line<head>')
@@ -367,46 +335,25 @@ while (x < numOfSets):
     except:
         # print("+-k W failure")
         pass
-    x+=2
+    x+=2 # Increment for this loop is by 2 because first line is the ID info, second line is the context.
 
-# for _ in testcontext:
-#     print(testcontext[_])
+'''---------------------------------------------------- Testing Data End ---------------------------------------------------------------------------------- '''
+''' ------------------------------------------------------------------------------------------------------------------------------------------------------- '''
+'''---------------------------------------------------------- Output -------------------------------------------------------------------------------------- '''
 
-threshold = 0
-''' Math it '''
-# for _ in testcontext:
-#     print(testcontext[_])
-
-
-''' what i need is a method that is going to get the tuple key like +1 W and WORD
-    take those, and test if THIS context has WORD at +1W'''
-Collection = {}
-
-# solved = False
-# while(not solved):
-#     # iterate through my ranked list!
-#     # testRSorted
-#     for x in range (0, len(testRSorted)): #fix this it ugly
-#         FT = testRSorted[x][0][0]
-#         F = testRSorted[x][0][1]
-#         solved = True
-# for _ in testcontext:
-#     print(_)
-
-#<answer instance="line-n.w8_059:8174:" senseid="phone"/>
-
+''' For every line of training, while not answered, parse the sorted rules.
+    If a sorted rule is found in the test context, select the sense. '''
 for _ in testcontext:
-    toPrint = "<answer instance=" + str(_)+ " senseid=\""
+    toPrint = "<answer instance=" + str(_)+ " senseid=\"" # Formatting
     solved = False
     added = False
-    thisSense = "phone" #baseline
+    thisSense = sense1 #baseline
     while (not solved):
-        for x in testRSorted:
-            FT = x[0][0]
-            F = x[0][1]
-            if F in testcontext[_][FT]: # This works for the array as well!
-                # print("Found it with " + str(FT) + " and ( " + str(F) + " )" )
-                if features[FT][F]["product"] > features[FT][F]["phone"]:
+        for x in sortedRules:
+            FT = x[0][0] # Feature Type (Like "W +1")
+            F = x[0][1]  # Feature (The word(s) found there)
+            if F in testcontext[_][FT]: # This works for the array as well! Which is AWESOME btw.
+                if features[FT][F][sense2] > features[FT][F][sense1]:
                     toPrint = toPrint + "product\"/>"
                     added = True
                 else:
@@ -417,28 +364,4 @@ for _ in testcontext:
         solved = True
     if not added:
         toPrint = toPrint + "phone\"/>"
-    print(toPrint)
-        
-''' OUTPUT!!! '''       
-
-
-
-
-
-
-# for x in testcontext:
-#     for x2 in testcontext[x]:
-#         print(x2)
-#         print(testcontext[x][x2])
-
-
-
-
-
-# for x in toAdd2:
-#     print(x)
-
-    
-'''-------------------------------------------------------------------------'''
-'''---------------------------------MAIN------------------------------------'''
-'''-------------------------------------------------------------------------'''
+    print(toPrint) # Output to command line or file by > in Linux
